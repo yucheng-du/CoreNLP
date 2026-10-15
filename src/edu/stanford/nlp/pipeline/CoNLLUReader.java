@@ -25,7 +25,6 @@ public class CoNLLUReader {
   /**
    * field constants
    **/
-  // TODO: read sent_id?
   public static final int CoNLLU_IndexField = 0;
   public static final int CoNLLU_WordField = 1;
   public static final int CoNLLU_LemmaField = 2;
@@ -451,14 +450,9 @@ public class CoNLLUReader {
      * Add sentence data for this sentence
      **/
     public void addSentenceData(String sentenceDataLine) {
-      int equals = sentenceDataLine.indexOf('=');
-      if (equals >= 0 && !sentenceDataLine.isEmpty() && sentenceDataLine.charAt(0) == '#') {
-        // the # and the spaces around the = are how the line is written,
-        // not part of the key or of the value.  only the first = is a
-        // separator, so a value may contain one of its own
-        String key = sentenceDataLine.substring(1, equals).trim();
-        String value = sentenceDataLine.substring(equals + 1).trim();
-        sentenceData.put(key, value);
+      Pair<String, String> keyValue = parseSentenceDataLine(sentenceDataLine);
+      if (keyValue != null) {
+        sentenceData.put(keyValue.first(), keyValue.second());
       }
       comments.add(sentenceDataLine);
     }
@@ -480,6 +474,23 @@ public class CoNLLUReader {
       mwtMiscs.add(mwtFields[CoNLLU_MiscField]);
       mwtLastCoreLabels.add(mwtEnd - 1);
     }
+  }
+
+  /**
+   * The key and value of a "# key = value" comment, or null if the line is not one
+   *<br>
+   * The # and the spaces around the = are how the line is written, not
+   * part of the key or of the value.  Only the first = is a separator, so
+   * a value may contain one of its own.
+   */
+  static Pair<String, String> parseSentenceDataLine(String sentenceDataLine) {
+    int equals = sentenceDataLine.indexOf('=');
+    if (equals < 0 || sentenceDataLine.charAt(0) != '#') {
+      return null;
+    }
+    String key = sentenceDataLine.substring(1, equals).trim();
+    String value = sentenceDataLine.substring(equals + 1).trim();
+    return new Pair<>(key, value);
   }
 
   /**
@@ -1204,6 +1215,12 @@ public class CoNLLUReader {
     }
 
     sentenceCoreMap.set(CoreAnnotations.CommentsAnnotation.class, sentence.comments);
+    // a sentence with no sent_id is left without one, rather than given a
+    // made up one which would then be written out as if it had been read
+    String sentId = sentence.sentenceData.get("sent_id");
+    if (sentId != null && !sentId.isEmpty()) {
+      sentenceCoreMap.set(CoreAnnotations.SentenceIDAnnotation.class, sentId);
+    }
     return sentenceCoreMap;
   }
 

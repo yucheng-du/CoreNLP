@@ -13,6 +13,7 @@ import edu.stanford.nlp.util.IntPair;
 
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 
@@ -277,7 +278,18 @@ public class CoNLLUDocumentWriter {
    */
 
   public String printPOSAnnotations(CoreMap sentence, boolean fakeDeps) {
+    return printPOSAnnotations(sentence, fakeDeps, Collections.emptyList());
+  }
+
+  /**
+   * Outputs the comments and then the token information, as in printPOSAnnotations(sentence, fakeDeps)
+   */
+  public String printPOSAnnotations(CoreMap sentence, boolean fakeDeps, Collection<String> comments) {
     StringBuilder sb = new StringBuilder();
+
+    for (String comment : comments) {
+      sb.append(comment).append(System.lineSeparator());
+    }
 
     int index = 0;
     for (CoreLabel token : sentence.get(CoreAnnotations.TokensAnnotation.class)) {

@@ -611,6 +611,7 @@ public class CoNLLUReaderTest {
     described.append("text |").append(sentence.get(CoreAnnotations.TextAnnotation.class)).append("|\n");
     described.append("index ").append(sentence.get(CoreAnnotations.SentenceIndexAnnotation.class)).append("\n");
     described.append("comments ").append(sentence.get(CoreAnnotations.CommentsAnnotation.class)).append("\n");
+    described.append("sent_id ").append(sentence.get(CoreAnnotations.SentenceIDAnnotation.class)).append("\n");
     for (CoreLabel token : tokens(sentence)) {
       described.append("token ").append(describeTokenFully(token)).append("\n");
     }
@@ -1047,6 +1048,57 @@ public class CoNLLUReaderTest {
         "");
     CoNLLUReader.CoNLLUSentence sentence = readRawDocuments(text).get(0).sentences.get(0);
     assertEquals("f(x) = y", sentence.sentenceData.get("text"));
+  }
+
+  @Test
+  public void testSentenceIDAnnotation() throws Exception {
+    List<CoreMap> sentences = readSentences(BASIC);
+    assertEquals("1", sentences.get(0).get(CoreAnnotations.SentenceIDAnnotation.class));
+    assertEquals("2", sentences.get(1).get(CoreAnnotations.SentenceIDAnnotation.class));
+    // the comments are still there as they were written
+    assertEquals(java.util.Arrays.asList("# sent_id = 1", "# text = Hola mundo."),
+                 sentences.get(0).get(CoreAnnotations.CommentsAnnotation.class));
+  }
+
+  @Test
+  public void testSentenceIDAnnotationWhenStreaming() throws Exception {
+    File file = writeTempFile(BASIC + MWT);
+    List<String> ids = new ArrayList<>();
+    try (CoNLLUReader.SentenceIterator sentences = new CoNLLUReader().sentenceIterator(file.getPath())) {
+      while (sentences.hasNext()) {
+        ids.add(sentences.next().get(CoreAnnotations.SentenceIDAnnotation.class));
+      }
+    } finally {
+      file.delete();
+    }
+    // the third sentence has no sent_id, and does not borrow one from
+    // the sentence before it
+    assertEquals(java.util.Arrays.asList("1", "2", null), ids);
+  }
+
+  @Test
+  public void testNoSentenceIDAnnotationWithoutASentId() throws Exception {
+    CoreMap sentence = readSentences(MWT).get(0);
+    assertNull(sentence.get(CoreAnnotations.SentenceIDAnnotation.class));
+  }
+
+  @Test
+  public void testSentenceIDAnnotationIsReadLikeOtherSentenceData() throws Exception {
+    String text = String.join("\n",
+        "#sent_id=a=b",
+        "1\tHola\thola\tINTJ\t_\t_\t0\troot\t_\t_",
+        "",
+        "# sent_id_extra = not-the-id",
+        "# this comment mentions sent_id but sets nothing",
+        "1\tHola\thola\tINTJ\t_\t_\t0\troot\t_\t_",
+        "",
+        "");
+    List<CoreMap> sentences = readSentences(text);
+    // the spaces around the = are optional, and only the first = separates
+    assertEquals("a=b", sentences.get(0).get(CoreAnnotations.SentenceIDAnnotation.class));
+    // a key which only starts with sent_id, or a comment which mentions it,
+    // is not a sent_id
+    assertNull(sentences.get(1).get(CoreAnnotations.SentenceIDAnnotation.class));
   }
 
   // ------------------------------------------------------------------
