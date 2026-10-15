@@ -132,9 +132,9 @@ public class CoNLLUDocumentWriter {
         HashMap<String, String> secondaryDeps = token.get(CoreAnnotations.CoNLLUSecondaryDepsAnnotation.class);
         if (secondaryDeps != null) {
           enhancedDependencies.putAll(token.get(CoreAnnotations.CoNLLUSecondaryDepsAnnotation.class));
-          //add basic dependency
+          // Add the basic dependency without replacing a stored enhanced relation.
           if (gov != null) {
-            enhancedDependencies.put(govIdx, reln.toString());
+            enhancedDependencies.putIfAbsent(govIdx, reln.toString());
           }
         }
       }
