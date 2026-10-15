@@ -172,6 +172,43 @@ public class CoNLLUOutputterTest {
                  commentsBySentence(new CoNLLUOutputter().print(document)));
   }
 
+  private static final String GLOBAL_COLUMNS = "# global.columns = ID FORM LEMMA UPOS XPOS FEATS HEAD DEPREL DEPS MISC";
+
+  @Test
+  public void testSentenceIDAddedAfterGlobalColumns() throws Exception {
+    // global.columns has to stay the first line of the file, so a sent_id
+    // added to the first sentence goes after it, as well as after the newdoc
+    List<String> expected = Arrays.asList(GLOBAL_COLUMNS, "# newdoc id = d1", "# sent_id = new-id", "# text = Hola");
+
+    // the comments on the graph, as the graphs from graphIterator carry them
+    Annotation document = read(String.join("\n",
+        "1\tHola\thola\tINTJ\t_\t_\t0\troot\t_\t_",
+        "",
+        ""));
+    CoreMap sentence = sentences(document).get(0);
+    SemanticGraph graph = sentence.get(SemanticGraphCoreAnnotations.BasicDependenciesAnnotation.class);
+    graph.addComment(GLOBAL_COLUMNS);
+    graph.addComment("# newdoc id = d1");
+    graph.addComment("# text = Hola");
+    sentence.set(CoreAnnotations.SentenceIDAnnotation.class, "new-id");
+    assertEquals(Collections.singletonList(expected), commentsBySentence(new CoNLLUOutputter().print(document)));
+    assertEquals(Arrays.asList(GLOBAL_COLUMNS, "# newdoc id = d1", "# text = Hola"), graph.getComments());
+
+    // and the comments the reader keeps for the first sentence of a file
+    document = read(String.join("\n",
+        GLOBAL_COLUMNS,
+        "# newdoc id = d1",
+        "# text = Hola",
+        "1\tHola\thola\tINTJ\t_\t_\t0\troot\t_\t_",
+        "",
+        ""));
+    sentence = sentences(document).get(0);
+    sentence.set(CoreAnnotations.SentenceIDAnnotation.class, "new-id");
+    assertEquals(Collections.singletonList(expected), commentsBySentence(new CoNLLUOutputter().print(document)));
+    assertEquals(Arrays.asList(GLOBAL_COLUMNS, "# newdoc id = d1", "# text = Hola"),
+                 sentence.get(CoreAnnotations.CommentsAnnotation.class));
+  }
+
   @Test
   public void testSentIdLineKeptAsWrittenWhenUnchanged() throws Exception {
     String text = String.join("\n",

@@ -169,7 +169,8 @@ public class CoNLLUOutputter extends AnnotationOutputter {
    * is replaced where it stands, and kept as it was written if it already
    * has this id.  Any later sent_id is dropped, since it would contradict
    * the first.  If there is no sent_id line, one is put after any newdoc
-   * and newpar lines at the start, which is where the UD treebanks have it.
+   * and newpar lines at the start, which is where the UD treebanks have it,
+   * and after a global.columns line, which has to be the first line of a file.
    *<br>
    * The list given is not changed.
    */
@@ -192,7 +193,8 @@ public class CoNLLUOutputter extends AnnotationOutputter {
         continue;
       }
       result.add(comment);
-      if (leading && DOCUMENT_OR_PARAGRAPH_LINE.matcher(comment).matches()) {
+      boolean globalColumns = keyValue != null && keyValue.first().equals("global.columns");
+      if (leading && (globalColumns || DOCUMENT_OR_PARAGRAPH_LINE.matcher(comment).matches())) {
         insertAt = result.size();
       } else {
         leading = false;
