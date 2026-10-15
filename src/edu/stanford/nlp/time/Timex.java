@@ -296,7 +296,7 @@ public class Timex implements Serializable {
       element.setAttribute("value", val);
     }
     if (altVal != null) {
-      element.setAttribute("altVal", altVal);
+      element.setAttribute("alt_value", altVal);
     }
     if (type != null) {
       element.setAttribute("type", type);
