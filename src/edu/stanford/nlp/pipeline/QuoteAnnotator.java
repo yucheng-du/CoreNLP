@@ -303,13 +303,12 @@ public class QuoteAnnotator implements Annotator  {
     }
   }
 
-  //TODO: update this so that it goes more than 1 layer deep
   private static int countQuotes(List<CoreMap> quotes) {
     int total = quotes.size();
     for (CoreMap quote : quotes) {
       List<CoreMap> innerQuotes = quote.get(CoreAnnotations.QuotationsAnnotation.class);
       if (innerQuotes != null) {
-        total += innerQuotes.size();
+        total += countQuotes(innerQuotes);
       }
     }
     return total;
@@ -386,39 +385,39 @@ public class QuoteAnnotator implements Annotator  {
     Comparator<CoreMap> quoteComparator = getQuoteComparator();
     cmQuotes.sort(quoteComparator);
 
-    // embed quotes
-    List<CoreMap> toRemove = new ArrayList<>();
-    for (CoreMap cmQuote : cmQuotes) {
+    // Each quote belongs to its nearest enclosing quote, not every ancestor.
+    List<CoreMap> topLevel = new ArrayList<>();
+    for (int i = 0; i < cmQuotes.size(); i++) {
+      CoreMap cmQuote = cmQuotes.get(i);
       int start = cmQuote.get(CoreAnnotations.CharacterOffsetBeginAnnotation.class);
       int end = cmQuote.get(CoreAnnotations.CharacterOffsetEndAnnotation.class);
-      // See if we need to embed a quote
       List<CoreMap> embeddedQuotes = new ArrayList<>();
-      for (CoreMap cmQuoteComp : cmQuotes) {
-        int startComp = cmQuoteComp.get(CoreAnnotations.CharacterOffsetBeginAnnotation.class);
-        int endComp = cmQuoteComp.get(CoreAnnotations.CharacterOffsetEndAnnotation.class);
-        if (start < startComp && end >= endComp) {
-          // p contains comp
-          embeddedQuotes.add(cmQuoteComp);
-          // now we want to remove it from the top-level quote list
-          toRemove.add(cmQuoteComp);
-        }
-      }
       if (!unclosed) {
         cmQuote.set(CoreAnnotations.QuotationsAnnotation.class, embeddedQuotes);
       } else {
         cmQuote.set(CoreAnnotations.UnclosedQuotationsAnnotation.class, embeddedQuotes);
       }
-    }
-
-    // Remove all the quotes that we want to.
-    for (CoreMap r : toRemove) {
-      // remove that quote from the overall list
-      cmQuotes.remove(r);
+      CoreMap parent = null;
+      for (int j = i - 1; j >= 0; j--) {
+        CoreMap candidate = cmQuotes.get(j);
+        if (candidate.get(CoreAnnotations.CharacterOffsetBeginAnnotation.class) < start &&
+            candidate.get(CoreAnnotations.CharacterOffsetEndAnnotation.class) >= end) {
+          parent = candidate;
+          break;
+        }
+      }
+      if (parent == null) {
+        topLevel.add(cmQuote);
+      } else if (!unclosed) {
+        parent.get(CoreAnnotations.QuotationsAnnotation.class).add(cmQuote);
+      } else {
+        parent.get(CoreAnnotations.UnclosedQuotationsAnnotation.class).add(cmQuote);
+      }
     }
 
     // Set the quote index annotations properly
-    setQuoteIndices(cmQuotes, unclosed);
-    return cmQuotes;
+    setQuoteIndices(topLevel, unclosed);
+    return topLevel;
   }
 
   private static void setQuoteIndices(List<CoreMap> topLevel, boolean unclosed) {
