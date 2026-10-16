@@ -100,6 +100,13 @@ public class ArgumentParser  {
      * @return A comma-separated list of alternate names, or empty for none
      */
     String alt() default "";
+
+    /**
+     * Whether to redact the option value in assignment logs and error messages.
+     *
+     * @return true for sensitive values such as passwords
+     */
+    boolean sensitive() default false;
   }
 
   @SuppressWarnings("MismatchedReadAndWriteOfArray")
@@ -140,15 +147,22 @@ public class ArgumentParser  {
    * ----------
    */
 
+  private static String optionValueForLog(Field field, String value) {
+    Option option = field.getAnnotation(Option.class);
+    return option != null && option.sensitive() ? "<redacted>" : value;
+  }
+
   private static void fillField(Object instance, Field f, String value) {
+    Option opt = f.getAnnotation(Option.class);
+    boolean sensitive = opt != null && opt.sensitive();
+    String displayValue = optionValueForLog(f, value);
     //--Verbose
     if (verbose) {
-      Option opt = f.getAnnotation(Option.class);
       StringBuilder b = new StringBuilder("setting ").append(f.getDeclaringClass().getName()).append('#').append(f.getName()).append(' ');
       if (opt != null) {
         b.append('[').append(opt.name()).append("] ");
       }
-      b.append("to: ").append(value);
+      b.append("to: ").append(displayValue);
       log(b.toString());
     }
 
@@ -170,7 +184,8 @@ public class ArgumentParser  {
           Object[] array = (Object[]) objVal;
           // error check
           if (!f.getType().isArray()) {
-            runtimeException("Setting an array to a non-array field. field: " + f + " value: " + Arrays.toString(array) + " src: " + value);
+            runtimeException("Setting an array to a non-array field. field: " + f + " value: " +
+                (sensitive ? "<redacted>" : Arrays.toString(array)) + " src: " + displayValue);
           }
           // create specific array
           Object toSet = Array.newInstance(f.getType().getComponentType(), array.length);
@@ -184,21 +199,29 @@ public class ArgumentParser  {
           f.set(instance, objVal);
         }
       } else {
-        runtimeException("Cannot assign option field: " + f + " value: " + value + "; invalid type");
+        runtimeException("Cannot assign option field: " + f + " value: " + displayValue + "; invalid type");
       }
       //--Permissions
       if (!accessState) {
         f.setAccessible(false);
       }
     } catch (IllegalArgumentException e) {
-      err(e);
-      runtimeException("Cannot assign option field: " + f.getDeclaringClass().getCanonicalName() + '.' + f.getName() + " value: " + value + " cause: " + e.getMessage());
+      if (!sensitive) {
+        err(e);
+      }
+      runtimeException("Cannot assign option field: " + f.getDeclaringClass().getCanonicalName() + '.' + f.getName() + " value: " + displayValue + " cause: " +
+          (sensitive ? e.getClass().getSimpleName() : e.getMessage()));
     } catch (IllegalAccessException e) {
-      err(e);
+      if (!sensitive) {
+        err(e);
+      }
       runtimeException("Cannot access option field: " + f.getDeclaringClass().getCanonicalName() + '.' + f.getName());
     } catch (Exception e) {
-      err(e);
-      runtimeException("Cannot assign option field: " + f.getDeclaringClass().getCanonicalName() + '.' + f.getName() + " value: " + value + " cause: " + e.getMessage());
+      if (!sensitive) {
+        err(e);
+      }
+      runtimeException("Cannot assign option field: " + f.getDeclaringClass().getCanonicalName() + '.' + f.getName() + " value: " + displayValue + " cause: " +
+          (sensitive ? e.getClass().getSimpleName() : e.getMessage()));
     }
   }
 
@@ -482,7 +505,7 @@ public class ArgumentParser  {
               err("Could not set option: " + entry.getKey() + "; no such field: " + fieldName + " in class: " + className);
             }
             if (target != null) {
-              log("option overrides " + target + " to '" + value + '\'');
+              log("option overrides " + target + " to '" + optionValueForLog(target, value) + '\'');
               fillField(class2object.get(target.getDeclaringClass()), target, value);
             } else {
               err("Could not set option: " + entry.getKey() + "; no such field: " + fieldName + " in class: " + className);

@@ -50,6 +50,12 @@ import static java.net.HttpURLConnection.*;
 /**
  * This class creates a server that runs a new Java annotator in each thread.
  *
+ * <p>For a custom SSL keystore, use {@code -ssl -key server.jks -keyPassword secret}.
+ * The keystore and its private key must use the same password, which defaults to
+ * {@code corenlp} for the bundled dummy keystore. This is independent of the HTTP
+ * basic authentication {@code -password}. Server options may also be supplied in
+ * a {@code -props} file; {@code -serverProperties} is for pipeline options only.
+ *
  * @author Gabor Angeli
  * @author Arun Chaganty
  */
@@ -75,9 +81,11 @@ public class StanfordCoreNLPServer implements Runnable {
   protected boolean ssl = false;
   @ArgumentParser.Option(name="key", gloss="The *.jks key file to load, if -ssl is enabled. By default, it'll load the dummy key from the jar (but this is, of course, insecure!)")
   protected static String key = "edu/stanford/nlp/pipeline/corenlp.jks";
+  @ArgumentParser.Option(name="keyPassword", sensitive=true, gloss="The password for both the SSL keystore and its private key (default: corenlp)")
+  protected static String keyPassword = "corenlp";
   @ArgumentParser.Option(name="username", gloss="The username component of a username/password basic auth credential")
   protected String username = null;
-  @ArgumentParser.Option(name="password", gloss="The password component of a username/password basic auth credential")
+  @ArgumentParser.Option(name="password", sensitive=true, gloss="The password component of a username/password basic auth credential")
   protected String password = null;
   @ArgumentParser.Option(name="preload", gloss="Cache all default annotators (if no list provided), or optionally " +
       "provide comma separated list of annotators to preload (e.g. tokenize,ssplit,pos)")
@@ -193,7 +201,7 @@ public class StanfordCoreNLPServer implements Runnable {
     Properties pipelinePropsFromCL = new Properties();
     if (props != null) {
       for (String key : props.stringPropertyNames()) {
-        if (!serverSpecificProperties.contains(key)) {
+        if (serverSpecificProperties.stream().noneMatch(key::equalsIgnoreCase)) {
           pipelinePropsFromCL.setProperty(key, props.getProperty(key));
         }
       }
@@ -1655,12 +1663,12 @@ public class StanfordCoreNLPServer implements Runnable {
     try (InputStream is = IOUtils.getInputStreamFromURLOrClasspathOrFileSystem(key)) {
       KeyStore ks = KeyStore.getInstance("JKS");
       if (StanfordCoreNLPServer.key != null && IOUtils.existsInClasspathOrFileSystem(StanfordCoreNLPServer.key)) {
-        ks.load(is, "corenlp".toCharArray());
+        ks.load(is, keyPassword.toCharArray());
       } else {
         throw new IllegalArgumentException("Could not find SSL keystore at " + StanfordCoreNLPServer.key);
       }
       KeyManagerFactory kmf = KeyManagerFactory.getInstance("SunX509");
-      kmf.init(ks, "corenlp".toCharArray());
+      kmf.init(ks, keyPassword.toCharArray());
       SSLContext sslContext = SSLContext.getInstance("TLS");
       sslContext.init(kmf.getKeyManagers(), null, null);
 
