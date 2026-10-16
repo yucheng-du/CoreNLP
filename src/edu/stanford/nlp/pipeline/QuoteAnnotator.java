@@ -296,6 +296,17 @@ public class QuoteAnnotator implements Annotator  {
                               List<CoreMap> quotes,
                               List<CoreMap> unclosed,
                               String message) {
+    if (SMART_QUOTES) {
+      // Candidates share document tokens. Remove indices from discarded candidates,
+      // then apply the selected closed and unclosed quotes in the usual order.
+      for (CoreLabel token : annotation.get(CoreAnnotations.TokensAnnotation.class)) {
+        token.remove(CoreAnnotations.QuotationIndexAnnotation.class);
+      }
+      setQuoteIndices(quotes, false);
+      if (EXTRACT_UNCLOSED) {
+        setQuoteIndices(unclosed, true);
+      }
+    }
     annotation.set(CoreAnnotations.QuotationsAnnotation.class, quotes);
     log.info(message);
     if (EXTRACT_UNCLOSED) {
