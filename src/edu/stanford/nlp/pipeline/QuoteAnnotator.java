@@ -39,6 +39,17 @@ import java.util.regex.Pattern;
  * standard english ones.
  *
  * <p>
+ * A quotation in curly double quotes may run over several paragraphs in the style where
+ * every paragraph of the quotation begins with “ and only the last one is closed with ”.
+ * If the “ which begins such a quotation cannot be closed otherwise, the quotation is
+ * taken to run from that “ to the ” which closes it, as long as each paragraph break
+ * inside it is a blank line (two or more line breaks, \n or \r\n, with nothing but
+ * spaces or tabs between them), no other “ is open inside it there, and the next
+ * paragraph begins with “, possibly after spaces or tabs.  Those “ marks stay in the
+ * text and tokens of the quotation, but are not reported as embedded quotations.
+ * Other quotation marks are not treated this way.
+ *
+ * <p>
  * There are a number of options that can be passed to the quote annotator to
  * customize its' behaviour:
  * <ul>
@@ -481,6 +492,16 @@ public class QuoteAnnotator implements Annotator  {
   }
 
   public Pair<List<Pair<Integer, Integer>>, List<Pair<Integer, Integer>>>  recursiveQuotes(String text, int offset, String prevQuote) {
+    return recursiveQuotes(text, offset, prevQuote, new BitSet());
+  }
+
+  /**
+   * {@code continuations} marks the positions in {@code text} of the “ which carry a
+   * quotation on into a new paragraph (see {@link #continuedQuoteEnd}).  They are not
+   * quotation marks of their own.  The ones found in this text are added to it.
+   */
+  private Pair<List<Pair<Integer, Integer>>, List<Pair<Integer, Integer>>> recursiveQuotes(String text, int offset, String prevQuote,
+                                                                                          BitSet continuations) {
     Map<String, List<Pair<Integer, Integer>>> quotesMap = new HashMap<>();
     int start = -1;
     int end = -1;
@@ -511,6 +532,8 @@ public class QuoteAnnotator implements Annotator  {
         }
       }
 
+      boolean continuation = continuations.get(i);
+
       if (DIRECTED_QUOTES.containsKey(quote) &&
           DIRECTED_QUOTES.get(quote).equals(c)) {
         if (c.equals("’")) {
@@ -525,7 +548,7 @@ public class QuoteAnnotator implements Annotator  {
       }
 
       // opening
-      if ((start < 0) && !matchesPrevQuote(c, prevQuote) &&
+      if ((start < 0) && !matchesPrevQuote(c, prevQuote) && !continuation &&
           (((isSingleQuoteWithUse(c) || c.equals("`")) && isSingleQuoteStart(text, i)) ||
             (c.equals("\"") || DIRECTED_QUOTES.containsKey(c)))) {
         start = i;
@@ -543,7 +566,7 @@ public class QuoteAnnotator implements Annotator  {
       }
 
       if (DIRECTED_QUOTES.containsKey(c) &&
-          c.equals(quote)) {
+          c.equals(quote) && !continuation) {
         // opening of this kind of directed quote
         directed++;
       }
@@ -560,6 +583,25 @@ public class QuoteAnnotator implements Annotator  {
 
       if (c.length() > 1) {
         i += c.length() - 1;
+      }
+
+      // The text has run out with a “ still open.  It may begin a quotation which
+      // goes on over several paragraphs; if so, take that quotation and go on
+      // after it.  The check below has not dropped this “ for being longer than
+      // maxLength, so such a quotation is not longer than maxLength either.
+      if (start >= 0 && i == text.length() - 1 && quote.equals("“")) {
+        int continuedEnd = continuedQuoteEnd(text, start, continuations);
+        if (continuedEnd > 0) {
+          if (!quotesMap.containsKey(quote)) {
+            quotesMap.put(quote, new ArrayList<>());
+          }
+          quotesMap.get(quote).add(new Pair<>(start, continuedEnd));
+          i = continuedEnd - 1;
+          start = -1;
+          quote = null;
+          directed = 0;
+          continue;
+        }
       }
 
       // forget about this quote
@@ -596,7 +638,8 @@ public class QuoteAnnotator implements Annotator  {
         unclosedQuotes.add(new Pair<>(start, text.length()));
       }
       String toPass = text.substring(start + quote.length());
-      Pair<List<Pair<Integer, Integer>>, List<Pair<Integer, Integer>>> embedded = recursiveQuotes(toPass, offset, null);
+      Pair<List<Pair<Integer, Integer>>, List<Pair<Integer, Integer>>> embedded = recursiveQuotes(toPass, offset, null,
+          continuations.get(start + quote.length(), text.length()));
       // these are the good quotes
       for (Pair<Integer, Integer> e : embedded.first()) {
         // offset by the amount of text we trimmed: start+quote.length()
@@ -624,7 +667,8 @@ public class QuoteAnnotator implements Annotator  {
             qKindToPass = qKind;
           }
           Pair<List<Pair<Integer, Integer>>, List<Pair<Integer, Integer>>> embedded =
-              recursiveQuotes(toPass, q.first() + qKind.length() + offset, qKindToPass);
+              recursiveQuotes(toPass, q.first() + qKind.length() + offset, qKindToPass,
+                  continuations.get(q.first() + qKind.length(), q.second() - qKind.length()));
           // good quotes
           for (Pair<Integer, Integer> e : embedded.first()) {
             // don't add offset here because the
@@ -646,6 +690,78 @@ public class QuoteAnnotator implements Annotator  {
     }
 
     return new Pair<>(quotes, unclosedQuotes);
+  }
+
+  /**
+   * Tries to read the “ at {@code start}, which nothing closes in the usual way, as the
+   * beginning of a quotation which goes on over several paragraphs: each later paragraph
+   * of the quotation begins with another “, and only the last one has the closing ”.
+   * A paragraph break is a blank line, that is, two or more line breaks (\n or \r\n) with
+   * nothing but spaces or tabs between them.  Wherever the quotation goes on over a
+   * paragraph break, no other “ may be open inside it, and the next paragraph has to begin
+   * with “ (spaces or tabs before it are fine), which carries the quotation on.  Any other
+   * “ or ” opens or closes a quotation inside it as usual.  The “ in {@code continuations}
+   * belong to quotations around this text and are not quotation marks here.
+   *
+   * @return The index just after the ” which closes the quotation, or -1 if the text
+   *   after {@code start} is not such a quotation.  If it is, the positions of the “ which
+   *   carry it on are added to {@code continuations}.
+   */
+  private static int continuedQuoteEnd(String text, int start, BitSet continuations) {
+    BitSet found = new BitSet();
+    int depth = 1;
+    int i = start + 1;
+    while (i < text.length()) {
+      if (lineBreakLength(text, i) > 0) {
+        // go past this stretch of line breaks, spaces and tabs, counting the line breaks
+        int lineBreaks = 0;
+        while (i < text.length()) {
+          int length = lineBreakLength(text, i);
+          if (length > 0) {
+            lineBreaks++;
+            i += length;
+          } else if (text.charAt(i) == ' ' || text.charAt(i) == '\t') {
+            i++;
+          } else {
+            break;
+          }
+        }
+        if (lineBreaks < 2) {
+          continue;
+        }
+        // a new paragraph, which the quotation can only go on into if no other “ is
+        // open inside it and the paragraph begins with “
+        if (depth > 1 || i == text.length() || text.charAt(i) != '“' || continuations.get(i)) {
+          return -1;
+        }
+        found.set(i);
+      } else if (text.charAt(i) == '“' && !continuations.get(i)) {
+        depth++;
+      } else if (text.charAt(i) == '”') {
+        depth--;
+        if (depth == 0) {
+          if (found.isEmpty()) {
+            // nothing carried it on into a new paragraph, so it is not such a quotation
+            return -1;
+          }
+          continuations.or(found);
+          return i + 1;
+        }
+      }
+      i++;
+    }
+    return -1;
+  }
+
+  /** The length of the line break (\n or \r\n) at {@code i} in {@code text}, or 0 if there is none there. */
+  private static int lineBreakLength(String text, int i) {
+    if (text.charAt(i) == '\n') {
+      return 1;
+    }
+    if (text.charAt(i) == '\r' && i + 1 < text.length() && text.charAt(i + 1) == '\n') {
+      return 2;
+    }
+    return 0;
   }
 
   private static boolean isAQuoteMapStarter(int target, Map<String, List<Pair<Integer, Integer>>> quotesMap) {
