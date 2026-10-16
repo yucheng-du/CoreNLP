@@ -121,6 +121,23 @@ public class QuoteAnnotatorMultiParagraphTest {
   }
 
   @Test
+  public void testMaxLengthWithRemainder() {
+    checkQuotes(TWO_PARAGRAPHS + " x", list("0-14"), list(),
+        "extractUnclosedQuotes", "true", "maxLength", "12");
+  }
+
+  @Test
+  public void testMaxLengthWithRemainderInPipeline() {
+    Annotation doc = annotate(TWO_PARAGRAPHS + " x", "extractUnclosedQuotes", "true", "maxLength", "12");
+    List<CoreMap> quotes = doc.get(CoreAnnotations.QuotationsAnnotation.class);
+    assertEquals(1, quotes.size());
+    checkQuote(quotes.get(0), doc, 0, 0, 14, 0, 4, 0, 0);
+    assertEquals(Collections.emptyList(), quotes.get(0).get(CoreAnnotations.QuotationsAnnotation.class));
+    assertEquals(Collections.emptyList(), doc.get(CoreAnnotations.UnclosedQuotationsAnnotation.class));
+    assertEquals(Arrays.asList(0, 0, 0, 0, 0, null), tokenQuoteIndices(doc));
+  }
+
+  @Test
   public void testOtherQuotationMarks() {
     checkQuotes("«alpha\n\n«beta»", list("8-14"), list("0-14"), "extractUnclosedQuotes", "true");
     checkQuotes("‘alpha\n\n‘beta’", list("8-14"), list("0-14"), "extractUnclosedQuotes", "true");

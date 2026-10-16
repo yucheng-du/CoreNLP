@@ -585,12 +585,12 @@ public class QuoteAnnotator implements Annotator  {
         i += c.length() - 1;
       }
 
-      // The text has run out with a “ still open.  It may begin a quotation which
-      // goes on over several paragraphs; if so, take that quotation and go on
-      // after it.  The check below has not dropped this “ for being longer than
-      // maxLength, so such a quotation is not longer than maxLength either.
-      if (start >= 0 && i == text.length() - 1 && quote.equals("“")) {
-        int continuedEnd = continuedQuoteEnd(text, start, continuations);
+      // Before abandoning an unmatched “ at the end of the text or at maxLength,
+      // try a continued quotation. Its own length must fit; trailing narration
+      // after its closer does not count towards that length.
+      if (start >= 0 && quote.equals("“") &&
+          (i == text.length() - 1 || (MAX_LENGTH > 0 && i - start > MAX_LENGTH))) {
+        int continuedEnd = continuedQuoteEnd(text, start, continuations, MAX_LENGTH);
         if (continuedEnd > 0) {
           if (!quotesMap.containsKey(quote)) {
             quotesMap.put(quote, new ArrayList<>());
@@ -707,11 +707,12 @@ public class QuoteAnnotator implements Annotator  {
    *   after {@code start} is not such a quotation.  If it is, the positions of the “ which
    *   carry it on are added to {@code continuations}.
    */
-  private static int continuedQuoteEnd(String text, int start, BitSet continuations) {
+  private static int continuedQuoteEnd(String text, int start, BitSet continuations, int maxLength) {
     BitSet found = new BitSet();
     int depth = 1;
     int i = start + 1;
-    while (i < text.length()) {
+    // As with strict pairing, maxLength counts the characters inside the delimiters.
+    while (i < text.length() && (maxLength <= 0 || i - start - 1 <= maxLength)) {
       if (lineBreakLength(text, i) > 0) {
         // go past this stretch of line breaks, spaces and tabs, counting the line breaks
         int lineBreaks = 0;
