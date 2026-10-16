@@ -3201,6 +3201,27 @@ public class SUTime  {
     }        */
 
     protected PartialTime addSupported(Period p, int scalar) {
+      if (p.getWeeks() != 0 && base.isSupported(DateTimeFieldType.year())
+          && base.isSupported(DateTimeFieldType.weekOfWeekyear())
+          && !base.isSupported(DateTimeFieldType.dayOfMonth())) {
+        // Weekly partials store the ISO weekyear in YEAR.  Joda needs WEEKYEAR
+        // while adding weeks so that it can carry across 52- and 53-week years.
+        Partial shifted = base.withPeriodAdded(Period.years(p.getYears()).withMonths(p.getMonths()), scalar);
+        int weekNumber = shifted.get(DateTimeFieldType.weekOfWeekyear());
+        // Start at week 1 so a year offset can temporarily leave a legacy week 53
+        // in a 52-week year.  Keep weeks before days and smaller units in the period.
+        Partial week = JodaTimeUtils.withWeekYear(shifted.without(DateTimeFieldType.monthOfYear())
+            .with(DateTimeFieldType.weekOfWeekyear(), 1))
+            .withPeriodAdded(Period.weeks(weekNumber - 1), 1)
+            .withPeriodAdded(p.withYears(0).withMonths(0), scalar);
+        // Retain other fields, including a month constraint used by intersections.
+        int weekyear = week.get(DateTimeFieldType.weekyear());
+        week = week.without(DateTimeFieldType.weekyear()).with(DateTimeFieldType.year(), weekyear);
+        if (shifted.isSupported(DateTimeFieldType.monthOfYear())) {
+          week = week.with(DateTimeFieldType.monthOfYear(), shifted.get(DateTimeFieldType.monthOfYear()));
+        }
+        return new PartialTime(week);
+      }
       return new PartialTime(base.withPeriodAdded(p, scalar));
     }
 
@@ -3961,7 +3982,19 @@ public class SUTime  {
           if (dtFieldTypes != null) {
             Time t = null;
             for (DateTimeFieldType dtft : dtFieldTypes) {
-              if (p.isSupported(dtft)) {
+              if (dtft == DateTimeFieldType.weekOfWeekyear()
+                  && p.isSupported(DateTimeFieldType.year())
+                  && p.isSupported(DateTimeFieldType.monthOfYear())
+                  && p.isSupported(DateTimeFieldType.dayOfMonth())) {
+                Instant instant = refTime.getJodaTimeInstant();
+                if (instant != null) {
+                  // The ISO weekyear can differ from the calendar year near January 1.
+                  Partial week = JodaTimeUtils.discardMoreSpecificFields(p.with(dtft, 1), dtft)
+                      .with(DateTimeFieldType.year(), instant.get(DateTimeFieldType.weekyear()))
+                      .with(dtft, instant.get(dtft));
+                  t = new PartialTime(week);
+                }
+              } else if (p.isSupported(dtft)) {
                 t = new PartialTime(JodaTimeUtils.discardMoreSpecificFields(p, dtft));
               }
             }
