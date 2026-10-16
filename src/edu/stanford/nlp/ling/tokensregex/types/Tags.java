@@ -73,6 +73,18 @@ public class Tags implements Serializable {
     return (tags != null)? tags.get(tag): null;
   }
 
+  /**
+   * Returns a new Tags object with the same tags, set to the same values.
+   * The values themselves are not copied.
+   */
+  public Tags copy() {
+    Tags copy = new Tags((String[]) null);
+    if (tags != null) {
+      copy.tags = new HashMap<>(tags);
+    }
+    return copy;
+  }
+
   @Override
   public boolean equals(Object o) {
     if (this == o) return true;

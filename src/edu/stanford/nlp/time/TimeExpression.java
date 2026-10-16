@@ -5,6 +5,8 @@ import edu.stanford.nlp.ling.CoreAnnotations;
 import edu.stanford.nlp.ling.tokensregex.Env;
 import edu.stanford.nlp.ling.tokensregex.MatchedExpression;
 import edu.stanford.nlp.ling.tokensregex.types.Expressions;
+import edu.stanford.nlp.ling.tokensregex.types.Tags;
+import edu.stanford.nlp.ling.tokensregex.types.Value;
 import edu.stanford.nlp.pipeline.CoreMapAggregator;
 import edu.stanford.nlp.util.CoreMap;
 import edu.stanford.nlp.util.ErasureUtils;
@@ -59,6 +61,50 @@ public class TimeExpression extends MatchedExpression {
   public TimeExpression(MatchedExpression expr)
   {
     super(expr);
+    // The value of a match is often shared: every match of { (/tuesdays?/) => TUESDAY } gets the
+    // one value that defs.sutime.txt binds to TUESDAY.  The tense rules at the end of
+    // english.sutime.txt tag the value of a time expression with the direction to resolve it in,
+    // so each time expression needs a value of its own, or the tense found for one Tuesday is used
+    // for every Tuesday, in later sentences and documents too (issue #1061).
+    if ( ! isValueOfNestedExpression()) {
+      value = copyOfValue(value);
+    }
+  }
+
+  /**
+   * Whether the value is that of one of the time expressions nested in this one, as for a composite
+   * rule with a result such as {@code $0[0].temporal.value}.  The nested expression got a value of
+   * its own when it was made, and keeps sharing it with this one, so that a tense given to the whole
+   * expression also holds for the nested one (which sutime.includeNested reports).
+   */
+  private boolean isValueOfNestedExpression() {
+    if (value == null || annotation == null) {
+      return false;
+    }
+    List<? extends CoreMap> children = annotation.get(ChildrenAnnotation.class);
+    if (children != null) {
+      for (CoreMap child : children) {
+        TimeExpression nested = child.get(Annotation.class);
+        if (nested != null && nested.value == value) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  /**
+   * A PrimitiveValue with the same type and the same object (usually a Temporal) as the given one,
+   * and a copy of its tags.  Values of any other class are returned as they are.
+   */
+  private static Value copyOfValue(Value value) {
+    if (value == null || value.getClass() != Expressions.PrimitiveValue.class) {
+      return value;
+    }
+    Value copy = new Expressions.PrimitiveValue<>(value.getType(), value.get());
+    Tags tags = value.getTags();
+    copy.setTags((tags != null) ? tags.copy() : null);
+    return copy;
   }
 
   public TimeExpression(Interval<Integer> charOffsets, Interval<Integer> tokenOffsets,
