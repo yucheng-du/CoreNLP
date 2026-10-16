@@ -1,5 +1,6 @@
 package edu.stanford.nlp.pipeline;
 
+import com.google.protobuf.ExtensionRegistry;
 import edu.stanford.nlp.ie.NumberNormalizer;
 import edu.stanford.nlp.ie.machinereading.structure.EntityMention;
 import edu.stanford.nlp.ie.machinereading.structure.ExtractionObject;
@@ -98,7 +99,7 @@ import edu.stanford.nlp.coref.data.SpeakerInfo;
  *   <li>
  *     <p>
  *     Extend {@link ProtobufAnnotationSerializer} to serialize and deserialize your field.
- *     Generally, this entail overriding two functions -- one to write the proto and one to read it.
+ *     Override the conversion functions -- one to write the proto and one to read it.
  *     In both cases, you usually want to call the superclass' implementation of the function, and add on to it
  *     from there.
  *     In our running example, adding a field to the {@link CoreNLPProtos.Sentence} proto, you would overwrite:
@@ -117,14 +118,15 @@ import edu.stanford.nlp.coref.data.SpeakerInfo;
  *     </p>
  *
  *     <p>
- *       Lastly, the new annotations must be registered in the original .proto file; this can be achieved by including
- *       a static block in the overwritten class:
+ *       Lastly, override {@link #getExtensionRegistry()} to provide a registry containing your extensions.
+ *       This registry is used by {@link #read(InputStream)} and {@link #readUndelimited(File)}. For example:
  *     </p>
  *     <pre>
- *       static {
+ *       &#64;Override
+ *       protected ExtensionRegistry getExtensionRegistry() {
  *         ExtensionRegistry registry = ExtensionRegistry.newInstance();
  *         registry.add(MyAppProtos.myNewField);
- *         CoreNLPProtos.registerAllExtensions(registry);
+ *         return registry;
  *       }
  *     </pre>
  *   </li>
@@ -186,6 +188,16 @@ public class ProtobufAnnotationSerializer extends AnnotationSerializer {
    */
   public ProtobufAnnotationSerializer(boolean enforceLosslessSerialization) { this.enforceLosslessSerialization = enforceLosslessSerialization; }
 
+  /**
+   * Return the registry used to read custom protobuf extensions.
+   * Subclasses can override this method to return their configured registry.
+   *
+   * @return A non-null extension registry, empty by default.
+   */
+  protected ExtensionRegistry getExtensionRegistry() {
+    return ExtensionRegistry.getEmptyRegistry();
+  }
+
   /** {@inheritDoc} */
   @Override
   public OutputStream write(Annotation corpus, OutputStream os) throws IOException {
@@ -198,7 +210,7 @@ public class ProtobufAnnotationSerializer extends AnnotationSerializer {
   /** {@inheritDoc} */
   @Override
   public Pair<Annotation, InputStream> read(InputStream is) throws IOException, ClassNotFoundException, ClassCastException {
-    CoreNLPProtos.Document doc = CoreNLPProtos.Document.parseDelimitedFrom(is);
+    CoreNLPProtos.Document doc = CoreNLPProtos.Document.parseDelimitedFrom(is, getExtensionRegistry());
     return Pair.makePair(fromProto(doc), is);
   }
 
@@ -213,12 +225,13 @@ public class ProtobufAnnotationSerializer extends AnnotationSerializer {
    */
   @SuppressWarnings({"UnusedDeclaration", "ThrowFromFinallyBlock"})
   public Annotation readUndelimited(File in) throws IOException {
+    ExtensionRegistry registry = getExtensionRegistry();
     CoreNLPProtos.Document doc;
     try (FileInputStream delimited = new FileInputStream(in)) {
-      doc = CoreNLPProtos.Document.parseFrom(delimited);
+      doc = CoreNLPProtos.Document.parseFrom(delimited, registry);
     } catch (Exception e) {
       try(FileInputStream undelimited = new FileInputStream(in)) {
-        doc = CoreNLPProtos.Document.parseDelimitedFrom(undelimited);
+        doc = CoreNLPProtos.Document.parseDelimitedFrom(undelimited, registry);
       }
     }
     return fromProto(doc);
