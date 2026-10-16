@@ -682,7 +682,7 @@ public class Document {
 
   /** @see Document#sentences(java.util.Properties) */
   public List<Sentence> sentences() {
-    return sentences(EMPTY_PROPS);
+    return sentences(defaultProps);
   }
 
   /** @see Document#sentences(java.util.Properties) */
