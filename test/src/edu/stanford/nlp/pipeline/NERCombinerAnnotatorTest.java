@@ -173,4 +173,53 @@ public class NERCombinerAnnotatorTest {
     english.setProperty(MAPPING, temporaryFolder.getRoot().toPath().resolve("unused.tag").toString());
     checkTags(annotator(english), "veinticinco", new String[] {"NUM"}, "O");
   }
+
+  private Properties pipelineProperties(String file, String label) throws IOException {
+    Properties props = properties();
+    props.setProperty("annotators", "tokenize,ssplit,ner");
+    props.setProperty("tokenize.language", "es");
+    props.setProperty(MAPPING, rules(file, label).toString());
+    return props;
+  }
+
+  private static NERCombinerAnnotator ner(StanfordCoreNLP pipeline) {
+    return (NERCombinerAnnotator) pipeline.pool.get("ner");
+  }
+
+  @Test
+  public void testPipelinesWithDifferentMappingsDoNotShareTheAnnotator() throws IOException {
+    Properties firstProps = pipelineProperties("first-pipeline.tag", "NUMBER");
+    Properties secondProps = pipelineProperties("second-pipeline.tag", "PERCENT");
+    StanfordCoreNLP.clearAnnotatorPool();
+    try {
+      StanfordCoreNLP first = new StanfordCoreNLP(firstProps, false);
+      StanfordCoreNLP second = new StanfordCoreNLP(secondProps, false);
+      checkTags(ner(first), "veinticinco", new String[] {"NUM"}, "NUMBER");
+      checkTags(ner(second), "veinticinco", new String[] {"NUM"}, "PERCENT");
+      assertNotSame(ner(first), ner(second));
+
+      // The same properties still reuse the cached annotator
+      StanfordCoreNLP third = new StanfordCoreNLP(secondProps, false);
+      assertSame(ner(second), ner(third));
+    } finally {
+      StanfordCoreNLP.clearAnnotatorPool();
+    }
+  }
+
+  @Test
+  public void testPipelinesWithDifferentMappingsAfterClearingThePool() throws IOException {
+    Properties firstProps = pipelineProperties("first-cleared.tag", "NUMBER");
+    Properties secondProps = pipelineProperties("second-cleared.tag", "PERCENT");
+    StanfordCoreNLP.clearAnnotatorPool();
+    try {
+      StanfordCoreNLP first = new StanfordCoreNLP(firstProps, false);
+      StanfordCoreNLP.clearAnnotatorPool();
+      StanfordCoreNLP second = new StanfordCoreNLP(secondProps, false);
+      assertNotSame(ner(first), ner(second));
+      checkTags(ner(first), "veinticinco", new String[] {"NUM"}, "NUMBER");
+      checkTags(ner(second), "veinticinco", new String[] {"NUM"}, "PERCENT");
+    } finally {
+      StanfordCoreNLP.clearAnnotatorPool();
+    }
+  }
 }

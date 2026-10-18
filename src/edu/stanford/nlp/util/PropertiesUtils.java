@@ -619,8 +619,9 @@ public class PropertiesUtils {
     if ("mention".equals(name)) {
       prefixes = new String[]{"mention", "coref"};
     }
+    // ner also reads the Spanish number rules path
     if ("ner".equals(name)) {
-      prefixes = new String[]{"ner", "sutime"};
+      prefixes = new String[]{"ner", "sutime", "spanish.number.regexner.mapping"};
     }
     Properties propertiesCopy = new Properties();
     propertiesCopy.putAll(properties);
