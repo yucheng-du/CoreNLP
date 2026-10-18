@@ -34,6 +34,11 @@ public class CoNLLUReaderITest {
   };
   static final String EXPECTED_TEXT = String.join(" ", EXPECTED_SENTENCE_TEXT) + " ";
 
+  static final String[] EXPECTED_SENTENCE_IDS = {
+    "3LB-CAST-a22-0-s10",
+    "3LB-CAST-a22-0-s11"
+  };
+
   static final String[][] EXPECTED_WORD_TEXT = {
     {"Pero", "la", "existencia", "de", "dos", "recién", "nacidos", "en", "la", "misma", "caja", "sólo", "podía", "deber", "se", "a", "un", "descuido", "de", "fábrica", "."},
     {"De", "allí", "las", "rebajas", "."},
@@ -123,6 +128,11 @@ public class CoNLLUReaderITest {
     }
 
     // Compare sentence ids
+    assertEquals(EXPECTED_SENTENCE_IDS.length, sentences.size());
+    for (int i = 0; i < sentences.size(); ++i) {
+      assertEquals(EXPECTED_SENTENCE_IDS[i], sentences.get(i).get(CoreAnnotations.SentenceIDAnnotation.class));
+    }
+
     // Check that the enhanced dependencies exist
     //   (these sentences should all have them, but we will check it
     //    more thoroughly for the Empty test sentence)
@@ -131,7 +141,8 @@ public class CoNLLUReaderITest {
       assertEquals(Integer.valueOf(i), sentences.get(i).get(CoreAnnotations.SentenceIndexAnnotation.class));
       assertTrue(sentences.get(i).containsKey(SemanticGraphCoreAnnotations.EnhancedDependenciesAnnotation.class));
       assertTrue(sentences.get(i).containsKey(CoreAnnotations.CommentsAnnotation.class));
-      assertEquals(6, sentences.get(i).keySet().size());
+      assertTrue(sentences.get(i).containsKey(CoreAnnotations.SentenceIDAnnotation.class));
+      assertEquals(7, sentences.get(i).keySet().size());
     }
 
     // Check the document tokens and the sentence tokens lists are the same
