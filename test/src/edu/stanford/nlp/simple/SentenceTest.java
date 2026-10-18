@@ -4,12 +4,14 @@ import edu.stanford.nlp.ling.CoreAnnotations;
 import edu.stanford.nlp.pipeline.Annotation;
 import edu.stanford.nlp.pipeline.StanfordCoreNLP;
 import edu.stanford.nlp.util.CoreMap;
+import org.junit.Assume;
 import org.junit.Test;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Properties;
 
@@ -31,6 +33,14 @@ public class SentenceTest {
   public void testText() {
     Sentence sent = new Sentence("the quick brown fox jumped over the lazy dog");
     assertEquals("the quick brown fox jumped over the lazy dog", sent.text());
+  }
+
+  @Test
+  public void testArabicSentenceFromTokensNeedsNoSegmenter() {
+    // ArabicDocument reads its properties from the classpath; ant test puts src on it
+    Assume.assumeNotNull(SentenceTest.class.getClassLoader().getResource("edu/stanford/nlp/pipeline/StanfordCoreNLP-arabic.properties"));
+    Sentence sent = new ArabicSentence(Arrays.asList("a", "b"));
+    assertEquals(Arrays.asList("a", "b"), sent.words());
   }
 
   @Test

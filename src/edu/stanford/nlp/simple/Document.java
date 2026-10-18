@@ -640,6 +640,11 @@ public class Document {
    * @return A list of Sentence objects representing the sentences in the document.
    */
   public List<Sentence> sentences(Properties props) {
+    // Once the sentences are made they are reused, so there is no need to create a tokenizer
+    List<Sentence> cached = this.sentences;
+    if (cached != null) {
+      return cached;
+    }
     return this.sentences(props,
         props == EMPTY_PROPS ? defaultTokenize : getOrCreate(Annotator.STANFORD_TOKENIZE, props, () -> backend.tokenizer(props)).get());
   }

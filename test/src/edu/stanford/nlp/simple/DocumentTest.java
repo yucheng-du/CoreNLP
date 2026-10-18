@@ -126,6 +126,21 @@ public class DocumentTest {
     assertEquals(1, doc.serialize().getSentenceCount());
   }
 
+  @Test
+  public void testCachedSentencesDoNotCreateTheDefaultTokenizer() {
+    CoreNLPProtos.Document proto = new Document("alpha beta. gamma.").serialize();
+    // Creating a tokenizer from these properties would fail: there is no such segmenter model
+    Properties props = new Properties();
+    props.setProperty("tokenize.language", "ar");
+    props.setProperty("segment.model", "edu/stanford/nlp/simple/no-such-segmenter.ser.gz");
+    Document doc = new Document(props, proto);
+
+    List<Sentence> sentences = doc.sentences();
+    assertEquals(2, sentences.size());
+    assertEquals(Arrays.asList("alpha", "beta", "."), doc.sentence(0).words());
+    assertSame(sentences, doc.sentences(props));
+  }
+
   private static Properties whitespaceSingleSentenceProperties() {
     Properties props = new Properties();
     props.setProperty("tokenize.whitespace", "true");
